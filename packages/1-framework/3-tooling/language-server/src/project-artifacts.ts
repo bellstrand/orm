@@ -134,11 +134,22 @@ export function createProjectArtifacts(options: ProjectArtifactsOptions): Projec
   ): ReadonlyMap<string, readonly LspDiagnostic[]> {
     const currentSymbolTable = readSymbolTable();
     const allDocuments = Array.from(documents.values(), ({ artifacts }) => artifacts.document);
+    // A warning (e.g. a deprecated scalar name) is reported alongside a
+    // successful interpretation, not instead of one — collected regardless
+    // of `result.ok` and distributed by `sourceId` the same way a failure's
+    // diagnostics are.
+    const warnings: ContractSourceDiagnostic[] = [];
     const result = activeInterpretation.source.interpret(
       { documents: allDocuments, sources, symbolTable: currentSymbolTable },
-      activeInterpretation.context,
+      {
+        ...activeInterpretation.context,
+        reportWarning: (diagnostic) => {
+          warnings.push({ ...diagnostic, severity: 'warning' });
+        },
+      },
     );
-    if (result.ok) {
+    const diagnostics = [...warnings, ...(result.ok ? [] : result.failure.diagnostics)];
+    if (diagnostics.length === 0) {
       return new Map();
     }
     const sourceFileByFilename = new Map<string, SourceFile>();
@@ -146,7 +157,7 @@ export function createProjectArtifacts(options: ProjectArtifactsOptions): Projec
       sourceFileByFilename.set(artifacts.sourceFile.filename, artifacts.sourceFile);
     }
     const grouped = new Map<string, ContractSourceDiagnostic[]>();
-    for (const diagnostic of result.failure.diagnostics) {
+    for (const diagnostic of diagnostics) {
       const group = grouped.get(diagnostic.sourceId);
       if (group === undefined) {
         grouped.set(diagnostic.sourceId, [diagnostic]);
@@ -155,10 +166,10 @@ export function createProjectArtifacts(options: ProjectArtifactsOptions): Projec
       }
     }
     const bySourceId = new Map<string, readonly LspDiagnostic[]>();
-    for (const [sourceId, diagnostics] of grouped) {
+    for (const [sourceId, sourceDiagnostics] of grouped) {
       const sourceFile = sourceFileByFilename.get(sourceId);
       if (sourceFile !== undefined) {
-        bySourceId.set(sourceId, mapInterpreterDiagnostics(diagnostics, sourceFile));
+        bySourceId.set(sourceId, mapInterpreterDiagnostics(sourceDiagnostics, sourceFile));
       }
     }
     return bySourceId;
