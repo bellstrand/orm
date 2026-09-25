@@ -154,7 +154,7 @@ describe('assembled attribute specs are consumable from a resolved project', () 
       ok({ config: pslProjectConfig(), diagnostics: [] }),
     );
 
-    const result = await resolveConfigInputs('/abs/prisma.config.ts');
+    const result = await resolveConfigInputs('/abs/prisma.config.ts', () => '// use prisma-8\n');
 
     const contributions = result.interpretation?.context.authoringContributions;
     expect(contributions).toBeDefined();
@@ -171,7 +171,7 @@ describe('assembled attribute specs are consumable from a resolved project', () 
       ok({ config: pslProjectConfig(), diagnostics: [] }),
     );
 
-    const result = await resolveConfigInputs('/abs/prisma.config.ts');
+    const result = await resolveConfigInputs('/abs/prisma.config.ts', () => '// use prisma-8\n');
     const interpretation = result.interpretation;
     expect(interpretation).toBeDefined();
     if (interpretation === undefined) return;
@@ -210,7 +210,7 @@ describe('assembled attribute specs are consumable from a resolved project', () 
       ok({ config: pslProjectConfig(), diagnostics: [] }),
     );
 
-    const result = await resolveConfigInputs('/abs/prisma.config.ts');
+    const result = await resolveConfigInputs('/abs/prisma.config.ts', () => '// use prisma-8\n');
     const interpretation = result.interpretation;
     expect(interpretation).toBeDefined();
     if (interpretation === undefined) return;

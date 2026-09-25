@@ -8,9 +8,10 @@ import type { PipelineInputs } from '../src/pipeline';
 import { resolveSchemaInputs } from '../src/schema-inputs';
 
 const schemaUri = pathToFileURL('/abs/schema.psl').toString();
-const inputs = resolveSchemaInputs({
-  contract: { source: { format: 'psl', inputs: ['/abs/schema.psl'] } },
-});
+const inputs = await resolveSchemaInputs(
+  { contract: { source: { format: 'psl', inputs: ['/abs/schema.psl'] } } },
+  () => '// use prisma-8\n',
+);
 
 const controlStack: PipelineInputs = {
   scalarTypes: ['String', 'Int', 'Boolean', 'DateTime'],

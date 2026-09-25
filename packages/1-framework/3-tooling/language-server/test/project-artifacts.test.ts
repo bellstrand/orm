@@ -29,9 +29,11 @@ afterEach(() => {
 });
 
 const schemaUri = pathToFileURL('/abs/schema.psl').toString();
-const inputs = resolveSchemaInputs({
-  contract: { source: { format: 'psl', inputs: ['/abs/schema.psl'] } },
-});
+const alwaysMember = (): string => '// use prisma-8\n';
+const inputs = await resolveSchemaInputs(
+  { contract: { source: { format: 'psl', inputs: ['/abs/schema.psl'] } } },
+  alwaysMember,
+);
 
 const controlStack: PipelineInputs = {
   scalarTypes: ['String', 'Int', 'Boolean', 'DateTime'],
@@ -55,6 +57,16 @@ function mirroredDocument(
   return undefined;
 }
 
+/** Like `mirroredDocument`, but for a disk-backed map with no open document. */
+function mirroredText(texts: ReadonlyMap<string, string>, uri: string): string | undefined {
+  for (const [diskUri, text] of texts) {
+    if (canonicalFileIdentity(diskUri) === canonicalFileIdentity(uri)) {
+      return text;
+    }
+  }
+  return undefined;
+}
+
 function projectWithMirror(interpretation?: ProjectInterpretation): {
   readonly texts: Map<string, string>;
   readonly store: ProjectArtifacts;
@@ -67,6 +79,7 @@ function projectWithMirror(interpretation?: ProjectInterpretation): {
     controlStack,
     onInterpretationError,
     getDocument: (uri) => mirroredDocument(texts, uri),
+    readText: (uri) => mirroredDocument(texts, uri)?.getText(),
     ...(interpretation === undefined ? {} : { interpretation }),
   });
   return { texts, store, onInterpretationError };
@@ -88,7 +101,7 @@ function interpretationDouble(interpret: PslInterpretCapable['interpret']): {
 }
 
 describe('createProjectArtifacts', () => {
-  it('owns symbol diagnostics at project level in configured order with source filenames', () => {
+  it('owns symbol diagnostics at project level in configured order with source filenames', async () => {
     const siblingUri = pathToFileURL('/abs/sibling.psl').toString();
     const texts = new Map([
       [schemaUri, cleanSource],
@@ -96,11 +109,15 @@ describe('createProjectArtifacts', () => {
     ]);
     const { interpretation, spy } = interpretationDouble(() => ok({} as never));
     const store = createProjectArtifacts({
-      inputs: resolveSchemaInputs({
-        contract: { source: { format: 'psl', inputs: ['/abs/schema.psl', '/abs/sibling.psl'] } },
-      }),
+      inputs: await resolveSchemaInputs(
+        {
+          contract: { source: { format: 'psl', inputs: ['/abs/schema.psl', '/abs/sibling.psl'] } },
+        },
+        alwaysMember,
+      ),
       controlStack,
       getDocument: (uri) => mirroredDocument(texts, uri),
+      readText: (uri) => mirroredDocument(texts, uri)?.getText(),
       onInterpretationError: vi.fn(),
       interpretation,
     });
@@ -234,18 +251,23 @@ describe('createProjectArtifacts', () => {
     expect(store.document(schemaUri)?.document).toBeDefined();
   });
 
-  it('excludes an unmarked sibling input from the symbol table', () => {
+  it('excludes an unmarked sibling input from the symbol table', async () => {
     const schema2Uri = pathToFileURL('/abs/schema2.psl').toString();
-    const twoInputs = resolveSchemaInputs({
-      contract: {
-        source: { format: 'psl', inputs: ['/abs/schema.psl', '/abs/schema2.psl'] },
-      },
-    });
     const texts = new Map<string, string>();
+    const readText = (uri: string): string | undefined => mirroredDocument(texts, uri)?.getText();
+    const twoInputs = await resolveSchemaInputs(
+      {
+        contract: {
+          source: { format: 'psl', inputs: ['/abs/schema.psl', '/abs/schema2.psl'] },
+        },
+      },
+      readText,
+    );
     const store = createProjectArtifacts({
       inputs: twoInputs,
       controlStack,
       getDocument: (uri) => mirroredDocument(texts, uri),
+      readText,
       onInterpretationError: vi.fn(),
     });
     texts.set(schemaUri, unmarkedSource);
@@ -255,6 +277,40 @@ describe('createProjectArtifacts', () => {
     const models = Object.keys(store.symbolTable().topLevel.models);
     expect(models).toContain('User');
     expect(models).not.toContain('Stray');
+  });
+
+  it('reads an unopened member from disk and resolves a cross-file reference against it', async () => {
+    const siblingUri = pathToFileURL('/abs/sibling.psl').toString();
+    const overlayTexts = new Map([
+      [
+        schemaUri,
+        `${directive}model Order {\n  id Int @id\n  customer Customer @relation(fields: [customerId])\n  customerId Int\n}\n`,
+      ],
+    ]);
+    const diskTexts = new Map([[siblingUri, `${directive}model Customer {\n  id Int @id\n}\n`]]);
+    const readText = (uri: string): string | undefined =>
+      mirroredDocument(overlayTexts, uri)?.getText() ?? mirroredText(diskTexts, uri);
+    const inputsWithDiskSibling = await resolveSchemaInputs(
+      {
+        contract: { source: { format: 'psl', inputs: ['/abs/schema.psl', '/abs/sibling.psl'] } },
+      },
+      readText,
+    );
+    const store = createProjectArtifacts({
+      inputs: inputsWithDiskSibling,
+      controlStack,
+      getDocument: (uri) => mirroredDocument(overlayTexts, uri),
+      readText,
+      onInterpretationError: vi.fn(),
+    });
+
+    const artifacts = store.document(schemaUri);
+    expect(artifacts?.diagnostics).toEqual([]);
+    // The sibling has no open document — only readText (the disk fallback)
+    // makes it readable — yet it still enters the merged symbol table.
+    expect(store.document(siblingUri)?.document).toBeDefined();
+    const models = Object.keys(store.symbolTable().topLevel.models);
+    expect(models).toEqual(expect.arrayContaining(['Order', 'Customer']));
   });
 
   it('reading the symbol table on a fresh store parses the open configured input once', () => {
@@ -274,18 +330,23 @@ describe('createProjectArtifacts', () => {
     expect(pipelineMock.runPipeline).toHaveBeenCalledTimes(1);
   });
 
-  it('rebuilds the symbol table from a sibling input after the contributing document closes', () => {
+  it('rebuilds the symbol table from a sibling input after the contributing document closes', async () => {
     const schema2Uri = pathToFileURL('/abs/schema2.psl').toString();
-    const twoInputs = resolveSchemaInputs({
-      contract: {
-        source: { format: 'psl', inputs: ['/abs/schema.psl', '/abs/schema2.psl'] },
-      },
-    });
     const texts = new Map<string, string>();
+    const readText = (uri: string): string | undefined => mirroredDocument(texts, uri)?.getText();
+    const twoInputs = await resolveSchemaInputs(
+      {
+        contract: {
+          source: { format: 'psl', inputs: ['/abs/schema.psl', '/abs/schema2.psl'] },
+        },
+      },
+      readText,
+    );
     const store = createProjectArtifacts({
       inputs: twoInputs,
       controlStack,
       getDocument: (uri) => mirroredDocument(texts, uri),
+      readText,
       onInterpretationError: vi.fn(),
     });
     texts.set(schemaUri, cleanSource);
@@ -299,18 +360,23 @@ describe('createProjectArtifacts', () => {
     expect(Object.keys(store.symbolTable().topLevel.models)).toContain('User');
   });
 
-  it('owns immutable registry snapshots matching cached roots through edits and closes', () => {
+  it('owns immutable registry snapshots matching cached roots through edits and closes', async () => {
     const siblingUri = pathToFileURL('/abs/sibling.psl').toString();
     const texts = new Map([
       [schemaUri, cleanSource],
       [siblingUri, twoModelSource],
     ]);
+    const readText = (uri: string): string | undefined => mirroredDocument(texts, uri)?.getText();
     const store = createProjectArtifacts({
-      inputs: resolveSchemaInputs({
-        contract: { source: { format: 'psl', inputs: ['/abs/schema.psl', '/abs/sibling.psl'] } },
-      }),
+      inputs: await resolveSchemaInputs(
+        {
+          contract: { source: { format: 'psl', inputs: ['/abs/schema.psl', '/abs/sibling.psl'] } },
+        },
+        readText,
+      ),
       controlStack,
       getDocument: (uri) => mirroredDocument(texts, uri),
+      readText,
       onInterpretationError: vi.fn(),
     });
     const first = store.document(schemaUri)!;
@@ -352,13 +418,27 @@ describe('createProjectArtifacts', () => {
     );
   });
 
-  it('throws when no configured input is open instead of fabricating a table', () => {
+  it('returns an empty table instead of throwing when no configured input is readable', () => {
     const { store } = projectWithMirror();
 
-    expect(() => store.symbolTable()).toThrowError(
-      /invariant violated.*no readable configured input/i,
-    );
+    expect(() => store.symbolTable()).not.toThrow();
+    expect(Object.keys(store.symbolTable().topLevel.models)).toEqual([]);
+    expect(store.symbolDiagnostics()).toEqual([]);
     expect(pipelineMock.runPipeline).not.toHaveBeenCalled();
+  });
+
+  it('keeps computing after its last open document closes (design decision 8)', () => {
+    const { texts, store } = projectWithMirror();
+    texts.set(schemaUri, cleanSource);
+    const first = store.document(schemaUri);
+    expect(first?.document).toBeDefined();
+    expect(Object.keys(store.symbolTable().topLevel.models)).toEqual(['User']);
+
+    texts.delete(schemaUri);
+    store.documentClosed(schemaUri);
+
+    expect(() => store.symbolTable()).not.toThrow();
+    expect(store.document(schemaUri)).toBeUndefined();
   });
 
   it('drops the artifacts on documentClosed', () => {
@@ -518,16 +598,21 @@ describe('interpret slot', () => {
     expect(spy).toHaveBeenCalledTimes(2);
   });
 
-  it('invalidates retained semantic memos and shared symbols when registry membership changes', () => {
+  it('invalidates retained semantic memos and shared symbols when registry membership changes', async () => {
     const siblingUri = pathToFileURL('/abs/sibling.psl').toString();
     const texts = new Map([[schemaUri, cleanSource]]);
+    const readText = (uri: string): string | undefined => mirroredDocument(texts, uri)?.getText();
     const { interpretation, spy } = interpretationDouble(() => ok({} as never));
     const store = createProjectArtifacts({
-      inputs: resolveSchemaInputs({
-        contract: { source: { format: 'psl', inputs: ['/abs/schema.psl', '/abs/sibling.psl'] } },
-      }),
+      inputs: await resolveSchemaInputs(
+        {
+          contract: { source: { format: 'psl', inputs: ['/abs/schema.psl', '/abs/sibling.psl'] } },
+        },
+        readText,
+      ),
       controlStack,
       getDocument: (uri) => mirroredDocument(texts, uri),
+      readText,
       onInterpretationError: vi.fn(),
       interpretation,
     });
@@ -583,7 +668,7 @@ describe('interpret slot', () => {
     ]);
   });
 
-  it('filters semantic findings from sibling files before mapping their local spans', () => {
+  it('filters semantic findings from sibling files before mapping their local spans', async () => {
     const siblingUri = pathToFileURL('/abs/sibling.psl').toString();
     const { interpretation } = interpretationDouble(() =>
       notOk({
@@ -598,12 +683,17 @@ describe('interpret slot', () => {
       [schemaUri, cleanSource],
       [siblingUri, twoModelSource],
     ]);
+    const readText = (uri: string): string | undefined => mirroredDocument(texts, uri)?.getText();
     const store = createProjectArtifacts({
-      inputs: resolveSchemaInputs({
-        contract: { source: { format: 'psl', inputs: ['/abs/schema.psl', '/abs/sibling.psl'] } },
-      }),
+      inputs: await resolveSchemaInputs(
+        {
+          contract: { source: { format: 'psl', inputs: ['/abs/schema.psl', '/abs/sibling.psl'] } },
+        },
+        readText,
+      ),
       controlStack,
       getDocument: (uri) => mirroredDocument(texts, uri),
+      readText,
       onInterpretationError: vi.fn(),
       interpretation,
     });
