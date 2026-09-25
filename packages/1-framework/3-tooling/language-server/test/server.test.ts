@@ -938,7 +938,7 @@ describe('language server', { timeout: timeouts.databaseOperation }, () => {
     const completions = completionItems(await requestCompletion(harness, schemaUri, position));
     expect(completions.map(({ label }) => label)).toContain('Post');
     expect(completions).toEqual(completionItems(await requestCompletion(harness, alias, position)));
-    expect(pipelineMock.runPipeline).toHaveBeenLastCalledWith(alias, updated, expect.any(Object));
+    expect(pipelineMock.runPipeline).toHaveBeenLastCalledWith(alias, updated);
     expect(configLoaderMock.findNearestConfigPathForFile).toHaveBeenCalledTimes(1);
     expect(harness.publishCount(schemaUri)).toBe(0);
     expect(harness.publishCount(alias)).toBe(0);
@@ -1323,11 +1323,7 @@ describe('language server', { timeout: timeouts.databaseOperation }, () => {
     ]);
     await republished;
     expect(pipelineMock.runPipeline).toHaveBeenCalledTimes(1);
-    expect(pipelineMock.runPipeline).toHaveBeenCalledWith(
-      schemaUri,
-      updated.source,
-      expect.any(Object),
-    );
+    expect(pipelineMock.runPipeline).toHaveBeenCalledWith(schemaUri, updated.source);
   });
 
   it('returns generic block parameter completions for configured PSL descriptors', async () => {
@@ -3624,6 +3620,15 @@ describe('language server config failure surfacing', {
     expect(fullReportItems(after).map((d) => d.code)).toContain('PSL_INTERPRETER_FINDING');
   });
 
+  /**
+   * One interpret call now carries every member currently read into the
+   * project (not just one document per call), so a specific document's
+   * position in `input.documents` is no longer stable — look it up by URI.
+   */
+  function documentFor(input: PslInterpretInput, uri: string) {
+    return input.documents.find((doc) => input.sources.sourceFileFor(doc.syntax).filename === uri);
+  }
+
   it.each(['edit', 'close'])(
     'invalidates last-good source roots on %s during a failed reload',
     async (event) => {
@@ -3670,11 +3675,13 @@ describe('language server config failure surfacing', {
       }
       await requestPullDiagnostics(harness, schemaUri);
       const current = spy.mock.calls.at(-1)![0];
-      expect(() => current.sources.sourceFileFor(previous.documents[0]!.syntax)).toThrow(
-        /No SourceFile/,
-      );
-      expect(current.sources.sourceFileFor(current.documents[0]!.syntax).filename).toBe(schemaUri);
-      expect(current.documents[0]).toBe(spy.mock.calls[0]![0].documents[0]);
+      const staleSibling = documentFor(previous, siblingUri);
+      expect(staleSibling).toBeDefined();
+      expect(() => current.sources.sourceFileFor(staleSibling!.syntax)).toThrow(/No SourceFile/);
+      const currentSchema = documentFor(current, schemaUri);
+      expect(currentSchema).toBeDefined();
+      expect(current.sources.sourceFileFor(currentSchema!.syntax).filename).toBe(schemaUri);
+      expect(currentSchema).toBe(documentFor(spy.mock.calls[0]![0], schemaUri));
     },
   );
 

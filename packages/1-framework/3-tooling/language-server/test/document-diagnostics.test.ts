@@ -1,10 +1,8 @@
 import { pathToFileURL } from 'node:url';
-import { buildSymbolTable } from '@internal/psl-parser';
 import { parse } from '@internal/psl-parser/syntax';
 import { describe, expect, it } from 'vitest';
 import { mapParseDiagnostics } from '../src/diagnostic-mapping';
 import { computeDocumentDiagnostics } from '../src/document-diagnostics';
-import type { PipelineInputs } from '../src/pipeline';
 import { resolveSchemaInputs } from '../src/schema-inputs';
 
 const schemaUri = pathToFileURL('/abs/schema.psl').toString();
@@ -13,33 +11,17 @@ const inputs = await resolveSchemaInputs(
   () => '// use prisma-8\n',
 );
 
-const controlStack: PipelineInputs = {
-  scalarTypes: ['String', 'Int', 'Boolean', 'DateTime'],
-  pslBlockDescriptors: {},
-};
-
 const directive = '// use prisma-8';
-
-const duplicateModelSource = [
-  directive,
-  'model User {',
-  '  id Int @id',
-  '}',
-  '',
-  'model User {',
-  '  id Int @id',
-  '}',
-].join('\n');
 
 describe('computeDocumentDiagnostics', () => {
   it('publishes parser diagnostics for a configured PSL input with a parse error', () => {
     const source = '// use prisma-8\nmodel {';
-    const result = computeDocumentDiagnostics(schemaUri, source, inputs, controlStack);
+    const result = computeDocumentDiagnostics(schemaUri, source, inputs);
     expect(result).not.toBeNull();
-    expect(result?.diagnostics).toEqual(
+    expect(result?.parseDiagnostics).toEqual(
       mapParseDiagnostics(parse(source, 'language-server-test.psl').diagnostics),
     );
-    expect(result?.diagnostics.length).toBeGreaterThan(0);
+    expect(result?.parseDiagnostics.length).toBeGreaterThan(0);
   });
 
   it('publishes an empty array for a clean configured PSL input', () => {
@@ -47,81 +29,54 @@ describe('computeDocumentDiagnostics', () => {
       schemaUri,
       '// use prisma-8\nmodel User {\n  id Int @id\n}\n',
       inputs,
-      controlStack,
     );
-    expect(result?.diagnostics).toEqual([]);
+    expect(result?.parseDiagnostics).toEqual([]);
   });
 
   it('returns null for a document that is not a configured input', () => {
     const otherUri = pathToFileURL('/abs/not-a-schema.psl').toString();
-    const result = computeDocumentDiagnostics(otherUri, 'model {', inputs, controlStack);
+    const result = computeDocumentDiagnostics(otherUri, 'model {', inputs);
     expect(result).toBeNull();
   });
 
   it('returns null for a configured input without the prisma-8 directive', () => {
-    const result = computeDocumentDiagnostics(schemaUri, 'model {', inputs, controlStack);
+    const result = computeDocumentDiagnostics(schemaUri, 'model {', inputs);
     expect(result).toBeNull();
   });
 
-  it('runs the symbol-table tier and reports a duplicate top-level declaration', () => {
-    const result = computeDocumentDiagnostics(
-      schemaUri,
-      duplicateModelSource,
-      inputs,
-      controlStack,
-    );
-    expect(result?.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
-      'PSL_DUPLICATE_DECLARATION',
-    );
-  });
-
-  it('matches the merged parse + symbol-table diagnostics for the same inputs', () => {
-    const source = [directive, 'model Profile {', '  user a.b.c', '}'].join('\n');
-    const {
-      document,
-      sources,
-      diagnostics: parseDiagnostics,
-    } = parse(source, 'language-server-test.psl');
-    const { diagnostics: symbolTableDiagnostics } = buildSymbolTable({
-      documents: [document],
-      sources,
-      pslBlockDescriptors: controlStack.pslBlockDescriptors,
-    });
-
-    const result = computeDocumentDiagnostics(schemaUri, source, inputs, controlStack);
-
-    expect(result?.diagnostics).toEqual(
-      mapParseDiagnostics([...parseDiagnostics, ...symbolTableDiagnostics]),
-    );
-  });
-
-  it('exposes the parsed AST and the symbol table as artifacts', () => {
+  it('exposes the parsed AST and source file as artifacts, with no symbol-table work', () => {
     const result = computeDocumentDiagnostics(
       schemaUri,
       '// use prisma-8\nmodel User {\n  id Int @id\n}\n',
       inputs,
-      controlStack,
     );
     expect(result?.document).toBeDefined();
     expect(result?.sourceFile).toBeDefined();
-    expect(result?.symbolTable).toBeDefined();
+    expect(result).not.toHaveProperty('symbolTable');
   });
 
-  it('returns null for a document that is not a configured input', () => {
-    const otherUri = pathToFileURL('/abs/not-a-schema.psl').toString();
-    expect(
-      computeDocumentDiagnostics(otherUri, duplicateModelSource, inputs, controlStack),
-    ).toBeNull();
+  it('does not report a duplicate top-level declaration — that is a project-level symbol-table concern', () => {
+    const duplicateModelSource = [
+      directive,
+      'model User {',
+      '  id Int @id',
+      '}',
+      '',
+      'model User {',
+      '  id Int @id',
+      '}',
+    ].join('\n');
+
+    const result = computeDocumentDiagnostics(schemaUri, duplicateModelSource, inputs);
+
+    expect(result?.parseDiagnostics.map((diagnostic) => diagnostic.code)).not.toContain(
+      'PSL_DUPLICATE_DECLARATION',
+    );
   });
 
   it('does not throw on a malformed, half-typed buffer', () => {
     expect(() =>
-      computeDocumentDiagnostics(
-        schemaUri,
-        '// use prisma-8\nmodel User {\n  id ',
-        inputs,
-        controlStack,
-      ),
+      computeDocumentDiagnostics(schemaUri, '// use prisma-8\nmodel User {\n  id ', inputs),
     ).not.toThrow();
   });
 });

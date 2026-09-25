@@ -3,7 +3,6 @@ import type {
   AssembledAuthoringContributions,
   ControlMutationDefaults,
 } from '@internal/framework-components/control';
-import { buildSymbolTable, type SymbolTable } from '@internal/psl-parser';
 import {
   type DocumentAst,
   type PslSources,
@@ -13,12 +12,11 @@ import {
 import { type LspDiagnostic, mapParseDiagnostics } from './diagnostic-mapping';
 
 /**
- * `pslBlockDescriptors` is kept complete on the live path so extension-block
- * validation matches the build; the structural diagnostics (duplicate
- * declaration, invalid qualified type) hold even without descriptors.
- * `scalarTypes`, `authoringContributions`, and `controlMutationDefaults` are not
- * consumed by the pipeline itself — they are the control-stack projection
- * semantic tokens and completions classify against.
+ * `pslBlockDescriptors` feeds the project-wide symbol table
+ * (`ProjectArtifacts`, built once over every member); `scalarTypes`,
+ * `authoringContributions`, and `controlMutationDefaults` are not consumed
+ * by parsing — they are the control-stack projection semantic tokens and
+ * completions classify against.
  */
 export interface PipelineInputs {
   readonly scalarTypes: readonly string[];
@@ -31,36 +29,26 @@ export interface PipelineResult {
   readonly document: DocumentAst;
   readonly sourceFile: SourceFile;
   readonly sources: PslSources;
-  readonly symbolTable: SymbolTable;
-  readonly diagnostics: readonly LspDiagnostic[];
   readonly parseDiagnostics: readonly LspDiagnostic[];
 }
 
 /**
- * Composes the stages exactly as the contract-psl provider does, so the editor
- * and the build agree: `parse` then `buildSymbolTable`, parse diagnostics ahead
- * of symbol-table diagnostics. Never throws on malformed input — `parse`
- * recovers and `buildSymbolTable` is documented not to throw.
+ * Parses one file exactly as the contract-psl provider does, so the editor
+ * and the build agree. Never throws on malformed input — `parse` recovers.
+ *
+ * Symbol-table diagnostics are a project-wide concern: `ProjectArtifacts`
+ * builds one symbol table over every member and distributes its diagnostics
+ * per file by filename, so this stays parse-only — a per-document symbol
+ * table here would be redundant with (and a strict subset of) that.
  */
-export function runPipeline(
-  filename: string,
-  text: string,
-  inputs: PipelineInputs,
-): PipelineResult {
+export function runPipeline(filename: string, text: string): PipelineResult {
   const { document, sources, diagnostics: parseDiagnostics } = parse(text, filename);
   const sourceFile = sources.sourceFileFor(document.syntax);
-  const { symbolTable, diagnostics: symbolTableDiagnostics } = buildSymbolTable({
-    documents: [document],
-    sources,
-    pslBlockDescriptors: inputs.pslBlockDescriptors,
-  });
 
   return {
     document,
     sourceFile,
     sources,
-    symbolTable,
     parseDiagnostics: mapParseDiagnostics(parseDiagnostics),
-    diagnostics: mapParseDiagnostics([...parseDiagnostics, ...symbolTableDiagnostics]),
   };
 }
