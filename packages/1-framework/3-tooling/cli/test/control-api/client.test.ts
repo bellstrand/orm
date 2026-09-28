@@ -971,6 +971,35 @@ describe('ControlClient progress emission', () => {
     });
   });
 
+  describe('supportsPslContractInfer()', () => {
+    it('reports true when the family instance implements PSL inference', () => {
+      const { mockFamily, mockTarget, mockAdapter, mockFamilyInstance } = createMockComponents();
+      (mockFamilyInstance as unknown as { inferPslContract: (ir: unknown) => unknown })[
+        'inferPslContract'
+      ] = () => ({ kind: 'document', namespaces: [] });
+
+      const client = createControlClient({
+        family: mockFamily,
+        target: mockTarget,
+        adapter: mockAdapter,
+      });
+
+      expect(client.supportsPslContractInfer()).toBe(true);
+    });
+
+    it('reports false when the family instance does not implement PSL inference', () => {
+      const { mockFamily, mockTarget, mockAdapter } = createMockComponents();
+
+      const client = createControlClient({
+        family: mockFamily,
+        target: mockTarget,
+        adapter: mockAdapter,
+      });
+
+      expect(client.supportsPslContractInfer()).toBe(false);
+    });
+  });
+
   describe('toOperationPreview()', () => {
     it('delegates to family instance when capability is implemented', () => {
       const fakePreview = {

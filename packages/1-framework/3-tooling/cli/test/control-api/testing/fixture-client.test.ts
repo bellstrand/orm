@@ -212,6 +212,7 @@ describe('createFixtureControlClient', () => {
 
     expect(client.toSchemaView({})).toBeUndefined();
     expect(client.inferPslContract({})).toBeUndefined();
+    expect(client.supportsPslContractInfer()).toBe(false);
     expect(client.getPslBlockDescriptors()).toEqual({});
     expect(client.toOperationPreview([])).toBeUndefined();
     const emit = await client.emit({

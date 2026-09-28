@@ -608,6 +608,11 @@ class ControlClientImpl implements ControlClient {
     return undefined;
   }
 
+  supportsPslContractInfer(): boolean {
+    this.init();
+    return this.familyInstance !== null && hasPslContractInfer(this.familyInstance);
+  }
+
   getPslBlockDescriptors(): AuthoringPslBlockDescriptorNamespace {
     this.init();
     return this.stack!.authoringContributions.pslBlockDescriptors;

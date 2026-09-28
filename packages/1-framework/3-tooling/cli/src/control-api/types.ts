@@ -1013,6 +1013,9 @@ export interface ControlClient {
    */
   inferPslContract(schemaIR: unknown): PslDocumentAst | undefined;
 
+  /** Whether the family can infer a PSL contract, which `contract infer` needs. */
+  supportsPslContractInfer(): boolean;
+
   /**
    * Returns the assembled PSL block descriptors from the control stack — the full
    * set of extension-contributed top-level block descriptors. The CLI's
