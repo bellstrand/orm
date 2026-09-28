@@ -339,6 +339,7 @@ function driftDiagnostics(inputs: {
           verb: 'verify',
           cwd: inputs.cwd,
           canInferContract: inputs.canInferContract,
+          contractRef: undefined,
         }),
       }),
     );

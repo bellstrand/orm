@@ -296,6 +296,7 @@ function ownerSchemaActions(inputs: {
   readonly schemaInput: string | undefined;
   readonly verb: 'sign' | 'verify';
   readonly cwd: string;
+  readonly dbUpdateCommand: string;
 }): readonly NextAction[] {
   const schemaPath =
     inputs.schemaInput === undefined
@@ -307,7 +308,7 @@ function ownerSchemaActions(inputs: {
     ),
     runCommandAction(
       `Or, if Prisma 8 manages it, change the database to match the contract, then ${inputs.verb} again`,
-      '{bin} db update',
+      inputs.dbUpdateCommand,
     ),
   ];
 }
@@ -317,20 +318,37 @@ export function schemaDriftNextActions(inputs: {
   readonly verb: 'sign' | 'verify';
   readonly cwd: string;
   readonly canInferContract: boolean;
+  readonly contractRef: string | undefined;
 }): readonly NextAction[] {
   const { source, verb, cwd } = inputs;
+  const dbUpdateCommand =
+    inputs.contractRef === undefined
+      ? '{bin} db update'
+      : `{bin} db update --to "${inputs.contractRef}"`;
   const updateDatabase = runCommandAction(
     `Change the database to match the contract, then ${verb} again`,
-    '{bin} db update',
+    dbUpdateCommand,
   );
   const handEditContract = chooseAction(
     `Or change the contract to describe the database as it is, re-run contract emit, then ${verb} again`,
   );
   switch (source?.format) {
     case 'prisma6':
-      return ownerSchemaActions({ owner: 'Prisma 6', schemaInput: source.inputs?.[0], verb, cwd });
+      return ownerSchemaActions({
+        owner: 'Prisma 6',
+        schemaInput: source.inputs?.[0],
+        verb,
+        cwd,
+        dbUpdateCommand,
+      });
     case 'prisma7':
-      return ownerSchemaActions({ owner: 'Prisma 7', schemaInput: source.inputs?.[0], verb, cwd });
+      return ownerSchemaActions({
+        owner: 'Prisma 7',
+        schemaInput: source.inputs?.[0],
+        verb,
+        cwd,
+        dbUpdateCommand,
+      });
     case 'psl': {
       const [only, ...rest] = source.inputs ?? [];
       if (

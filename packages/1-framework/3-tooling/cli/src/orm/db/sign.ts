@@ -350,6 +350,7 @@ export function createDbSignCommand(
                       verb: 'sign',
                       cwd: ctx.cwd,
                       canInferContract: client.supportsPslContractInfer(),
+                      contractRef,
                     }),
                   }),
                 ],

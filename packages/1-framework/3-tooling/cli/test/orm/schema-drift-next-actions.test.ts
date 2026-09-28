@@ -21,6 +21,7 @@ describe('schemaDriftNextActions', () => {
         verb: 'sign',
         cwd: '/project',
         canInferContract: true,
+        contractRef: undefined,
       }),
     ).toEqual([
       {
@@ -44,6 +45,7 @@ describe('schemaDriftNextActions', () => {
         verb: 'verify',
         cwd: '/project',
         canInferContract: true,
+        contractRef: undefined,
       }),
     ).toEqual([
       {
@@ -67,6 +69,7 @@ describe('schemaDriftNextActions', () => {
         verb: 'sign',
         cwd: '/project',
         canInferContract: true,
+        contractRef: undefined,
       })[0],
     ).toEqual({
       kind: 'user-choice',
@@ -82,6 +85,7 @@ describe('schemaDriftNextActions', () => {
         verb: 'sign',
         cwd: '/project',
         canInferContract: true,
+        contractRef: undefined,
       }),
     ).toEqual([
       DB_UPDATE,
@@ -101,6 +105,7 @@ describe('schemaDriftNextActions', () => {
         verb: 'sign',
         cwd: '/project',
         canInferContract: false,
+        contractRef: undefined,
       }),
     ).toEqual([DB_UPDATE, HAND_EDIT]);
   });
@@ -112,6 +117,7 @@ describe('schemaDriftNextActions', () => {
         verb: 'sign',
         cwd: '/project',
         canInferContract: true,
+        contractRef: undefined,
       }),
     ).toEqual([DB_UPDATE, HAND_EDIT]);
   });
@@ -123,6 +129,7 @@ describe('schemaDriftNextActions', () => {
         verb: 'sign',
         cwd: '/project',
         canInferContract: true,
+        contractRef: undefined,
       }),
     ).toEqual([DB_UPDATE, HAND_EDIT]);
   });
@@ -134,6 +141,7 @@ describe('schemaDriftNextActions', () => {
         verb: 'sign',
         cwd: '/project',
         canInferContract: true,
+        contractRef: undefined,
       }),
     ).toEqual([DB_UPDATE, HAND_EDIT]);
   });
@@ -145,6 +153,7 @@ describe('schemaDriftNextActions', () => {
         verb: 'sign',
         cwd: '/project',
         canInferContract: true,
+        contractRef: undefined,
       }),
     ).toEqual([DB_UPDATE, HAND_EDIT]);
   });
@@ -156,6 +165,7 @@ describe('schemaDriftNextActions', () => {
         verb: 'sign',
         cwd: '/project',
         canInferContract: true,
+        contractRef: undefined,
       }),
     ).toEqual([DB_UPDATE, HAND_EDIT]);
   });
@@ -167,8 +177,38 @@ describe('schemaDriftNextActions', () => {
         verb: 'sign',
         cwd: '/project',
         canInferContract: true,
+        contractRef: undefined,
       }),
     ).toEqual([DB_UPDATE, HAND_EDIT]);
+  });
+
+  it('aims db update at the ref being signed', () => {
+    expect(
+      schemaDriftNextActions({
+        source: undefined,
+        verb: 'sign',
+        cwd: '/project',
+        canInferContract: true,
+        contractRef: 'staging',
+      }),
+    ).toEqual([{ ...DB_UPDATE, command: '{bin} db update --to "staging"' }, HAND_EDIT]);
+  });
+
+  it('aims the Prisma 6 and 7 db update action at the ref being signed', () => {
+    expect(
+      schemaDriftNextActions({
+        source: { format: 'prisma7', inputs: ['/project/schema.prisma'] },
+        verb: 'sign',
+        cwd: '/project',
+        canInferContract: true,
+        contractRef: 'staging',
+      })[1],
+    ).toEqual({
+      kind: 'run-command',
+      label:
+        'Or, if Prisma 8 manages it, change the database to match the contract, then sign again',
+      command: '{bin} db update --to "staging"',
+    });
   });
 
   it('offers db update, then a hand edit of the contract, when the config has no source', () => {
@@ -178,6 +218,7 @@ describe('schemaDriftNextActions', () => {
         verb: 'sign',
         cwd: '/project',
         canInferContract: true,
+        contractRef: undefined,
       }),
     ).toEqual([DB_UPDATE, HAND_EDIT]);
   });

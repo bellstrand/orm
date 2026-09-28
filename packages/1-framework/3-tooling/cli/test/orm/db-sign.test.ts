@@ -222,7 +222,7 @@ describe('db sign', () => {
       expect(diagnosticsOf(run)[0]?.nextActions).toEqual(SOURCE_NEUTRAL_ACTIONS);
     });
 
-    it('gives the source-neutral actions when signing a ref, whose contract is not the source', async () => {
+    it('gives the source-neutral actions, with db update aimed at the ref, when signing a ref', async () => {
       const dir = await projectDir();
       await writeRef(refsDirOf(dir), 'staging', { hash: HASH_A, invariants: [] });
       mocks.schemaVerify.mockResolvedValue(DRIFTED);
@@ -232,7 +232,10 @@ describe('db sign', () => {
       });
 
       expect(run.exitCode).toBe(4);
-      expect(diagnosticsOf(run)[0]?.nextActions).toEqual(SOURCE_NEUTRAL_ACTIONS);
+      expect(diagnosticsOf(run)[0]?.nextActions).toEqual([
+        { ...SOURCE_NEUTRAL_ACTIONS[0], command: '{bin} db update --to "staging"' },
+        SOURCE_NEUTRAL_ACTIONS[1],
+      ]);
     });
 
     it('reports the schema-verify document as the --json payload', async () => {
