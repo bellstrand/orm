@@ -204,6 +204,19 @@ withTempDir(({ createTempDir }) => {
           ],
           unclaimed: ['LegacyThing'],
         });
+        expect(strictVerify.presented?.diagnostics[0]?.nextActions).toEqual([
+          {
+            kind: 'user-choice',
+            label:
+              'If Prisma 7 still manages this database, change schema.prisma to describe it as it is, re-run contract emit, then verify again',
+          },
+          {
+            kind: 'run-command',
+            label:
+              'Or, if Prisma 8 manages it, change the database to match the contract, then verify again',
+            command: '{bin} db update',
+          },
+        ]);
       },
       timeouts.spinUpPpgDev,
     );
