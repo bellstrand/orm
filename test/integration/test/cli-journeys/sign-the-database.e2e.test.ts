@@ -130,12 +130,12 @@ describe('sign a database this toolchain has never seen, then transition to wire
           kind: 'run-command',
           label:
             'Or replace contract.prisma with a contract inferred from the database, then re-emit and sign again',
-          command: '{bin} contract infer --output contract.prisma',
+          command: '{bin} contract infer --output "contract.prisma"',
         },
       ]);
 
       // Infer captures the full surface.
-      const infer = await runContractInfer(ctx);
+      const infer = await runContractInfer(ctx, ['--output', 'contract.prisma']);
       expect(infer.exitCode, `2.1: contract infer\n${stripAnsi(infer.stderr)}`).toBe(0);
       inferredPsl = readFileSync(join(ctx.testDir, 'contract.prisma'), 'utf-8');
       expect(inferredPsl).toContain(
