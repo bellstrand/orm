@@ -1,5 +1,22 @@
-import { describe, expect, it } from 'vitest';
+import { mkdirSync, rmSync } from 'node:fs';
+import { join } from 'pathe';
+import { afterEach, describe, expect, it } from 'vitest';
 import { schemaDriftNextActions } from '../../src/orm/db/verification';
+import { createTestProjectDir } from '../utils/test-project-dir';
+
+const dirs: string[] = [];
+
+afterEach(() => {
+  for (const dir of dirs.splice(0)) {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+function projectDir(): string {
+  const dir = createTestProjectDir('schema-drift-next-actions');
+  dirs.push(dir);
+  return dir;
+}
 
 const DB_UPDATE = {
   kind: 'run-command',
@@ -75,6 +92,43 @@ describe('schemaDriftNextActions', () => {
       kind: 'user-choice',
       label:
         'If Prisma 7 still manages this database, change your schema.prisma to describe it as it is, re-run contract emit, then sign again',
+    });
+  });
+
+  it('names the schema files under a Prisma 7 schema directory', () => {
+    const cwd = projectDir();
+    mkdirSync(join(cwd, 'prisma'));
+
+    expect(
+      schemaDriftNextActions({
+        source: { format: 'prisma7', inputs: [join(cwd, 'prisma')] },
+        verb: 'sign',
+        cwd,
+        canInferContract: true,
+        contractRef: undefined,
+      })[0],
+    ).toEqual({
+      kind: 'user-choice',
+      label:
+        'If Prisma 7 still manages this database, change the schema files under prisma to describe it as it is, re-run contract emit, then sign again',
+    });
+  });
+
+  it('names this directory when the Prisma 7 schema directory is the working directory', () => {
+    const cwd = projectDir();
+
+    expect(
+      schemaDriftNextActions({
+        source: { format: 'prisma7', inputs: [cwd] },
+        verb: 'sign',
+        cwd,
+        canInferContract: true,
+        contractRef: undefined,
+      })[0],
+    ).toEqual({
+      kind: 'user-choice',
+      label:
+        'If Prisma 7 still manages this database, change the schema files under this directory to describe it as it is, re-run contract emit, then sign again',
     });
   });
 

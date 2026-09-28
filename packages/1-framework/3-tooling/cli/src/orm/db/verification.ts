@@ -1,3 +1,4 @@
+import { statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import type { OpaqueContractSourceProvider, PrismaNextConfig } from '@internal/config/config-types';
 import type { Contract } from '@internal/contract/types';
@@ -291,6 +292,19 @@ export function schemaVerdictDiagnostic(inputs: {
   };
 }
 
+function schemaLocation(input: string | undefined, cwd: string): string {
+  if (input === undefined) {
+    return 'your schema.prisma';
+  }
+  const shown = displayPath(input, cwd);
+  if (shown === '') {
+    return 'the schema files under this directory';
+  }
+  return statSync(input, { throwIfNoEntry: false })?.isDirectory() === true
+    ? `the schema files under ${shown}`
+    : shown;
+}
+
 function earlierPrismaSchemaActions(inputs: {
   readonly earlierPrisma: string;
   readonly schemaInput: string | undefined;
@@ -298,10 +312,7 @@ function earlierPrismaSchemaActions(inputs: {
   readonly cwd: string;
   readonly dbUpdateCommand: string;
 }): readonly NextAction[] {
-  const schemaPath =
-    inputs.schemaInput === undefined
-      ? 'your schema.prisma'
-      : displayPath(inputs.schemaInput, inputs.cwd);
+  const schemaPath = schemaLocation(inputs.schemaInput, inputs.cwd);
   return [
     chooseAction(
       `If ${inputs.earlierPrisma} still manages this database, change ${schemaPath} to describe it as it is, re-run contract emit, then ${inputs.verb} again`,
