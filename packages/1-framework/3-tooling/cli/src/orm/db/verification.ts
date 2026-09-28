@@ -291,8 +291,8 @@ export function schemaVerdictDiagnostic(inputs: {
   };
 }
 
-function ownerSchemaActions(inputs: {
-  readonly owner: string;
+function earlierPrismaSchemaActions(inputs: {
+  readonly earlierPrisma: string;
   readonly schemaInput: string | undefined;
   readonly verb: 'sign' | 'verify';
   readonly cwd: string;
@@ -304,7 +304,7 @@ function ownerSchemaActions(inputs: {
       : displayPath(inputs.schemaInput, inputs.cwd);
   return [
     chooseAction(
-      `If ${inputs.owner} still manages this database, change ${schemaPath} to describe it as it is, re-run contract emit, then ${inputs.verb} again`,
+      `If ${inputs.earlierPrisma} still manages this database, change ${schemaPath} to describe it as it is, re-run contract emit, then ${inputs.verb} again`,
     ),
     runCommandAction(
       `Or, if Prisma 8 manages it, change the database to match the contract, then ${inputs.verb} again`,
@@ -334,16 +334,16 @@ export function schemaDriftNextActions(inputs: {
   );
   switch (source?.format) {
     case 'prisma6':
-      return ownerSchemaActions({
-        owner: 'Prisma 6',
+      return earlierPrismaSchemaActions({
+        earlierPrisma: 'Prisma 6',
         schemaInput: source.inputs?.[0],
         verb,
         cwd,
         dbUpdateCommand,
       });
     case 'prisma7':
-      return ownerSchemaActions({
-        owner: 'Prisma 7',
+      return earlierPrismaSchemaActions({
+        earlierPrisma: 'Prisma 7',
         schemaInput: source.inputs?.[0],
         verb,
         cwd,
