@@ -125,7 +125,7 @@ export function createServer(connection: Connection): LanguageServer {
 
 function createServerOn(connection: Connection): LanguageServer {
   const documents = new DocumentStore();
-  const { getDocument } = documents;
+  const { getOpenDocument } = documents;
   const managedProjects = new Map<string, ManagedProject>();
   const documentConfigPaths = new Map<string, string>();
   const publishedMembers = new Map<string, ReadonlyMap<string, string>>();
@@ -149,7 +149,7 @@ function createServerOn(connection: Connection): LanguageServer {
   function membersToPush(project: ProjectState): readonly string[] {
     const members = Array.from(project.inputs.uris());
     return clientCapabilities.pullDiagnostics
-      ? members.filter((uri) => getDocument(uri) === undefined)
+      ? members.filter((uri) => getOpenDocument(uri) === undefined)
       : members;
   }
 
@@ -158,7 +158,7 @@ function createServerOn(connection: Connection): LanguageServer {
     if (closedOverride !== undefined && closedOverride.identity === identity) {
       return closedOverride.uri;
     }
-    return getDocument(candidateUri)?.uri ?? candidateUri;
+    return getOpenDocument(candidateUri)?.uri ?? candidateUri;
   }
 
   function publishProjectMembers(project: ProjectState, closedOverride?: ClosedOverride): void {
@@ -166,7 +166,7 @@ function createServerOn(connection: Connection): LanguageServer {
     const projectSymbolDiagnostics = project.artifacts.symbolDiagnostics();
     for (const candidateUri of membersToPush(project)) {
       const artifacts = project.artifacts.document(candidateUri);
-      if (artifacts === undefined && getDocument(candidateUri) === undefined) {
+      if (artifacts === undefined && getOpenDocument(candidateUri) === undefined) {
         continue;
       }
       const uri = pushTargetUri(candidateUri, closedOverride);
@@ -426,8 +426,7 @@ function createServerOn(connection: Connection): LanguageServer {
     const artifacts = createProjectArtifacts({
       inputs: resolution.inputs,
       controlStack: resolution.controlStack,
-      getDocument,
-      readText,
+      readSnapshot: documents.readSnapshot,
       onInterpretationError: (uri, error) => {
         const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
         connection.console.error(`PSL interpretation failed for ${uri}: ${detail}`);
@@ -453,7 +452,7 @@ function createServerOn(connection: Connection): LanguageServer {
   // A failed first load serves no project: its documents drop their
   // association and re-resolve (and retry the load) on their next read.
   function unmanageDocuments(configPath: string): void {
-    for (const document of documents.all()) {
+    for (const document of documents.openDocuments()) {
       if (documentConfigPaths.get(canonicalFileIdentity(document.uri)) === configPath) {
         documentConfigPaths.delete(canonicalFileIdentity(document.uri));
       }
@@ -475,7 +474,7 @@ function createServerOn(connection: Connection): LanguageServer {
   }
 
   async function formatDocument(uri: string): Promise<TextEdit[]> {
-    const document = getDocument(uri);
+    const document = getOpenDocument(uri);
     if (document === undefined) {
       return [];
     }
@@ -510,7 +509,7 @@ function createServerOn(connection: Connection): LanguageServer {
   }
 
   async function semanticTokensForDocument(uri: string, range?: Range): Promise<SemanticTokens> {
-    const document = getDocument(uri);
+    const document = getOpenDocument(uri);
     if (document === undefined) {
       return emptySemanticTokens();
     }
@@ -539,7 +538,7 @@ function createServerOn(connection: Connection): LanguageServer {
   }
 
   async function completeDocument(uri: string, position: Position): Promise<CompletionItem[]> {
-    const document = getDocument(uri);
+    const document = getOpenDocument(uri);
     if (document === undefined) {
       return [];
     }
@@ -590,7 +589,7 @@ function createServerOn(connection: Connection): LanguageServer {
     uri: string,
     position: Position,
   ): Promise<SignatureHelp | null> {
-    if (getDocument(uri) === undefined) return null;
+    if (getOpenDocument(uri) === undefined) return null;
     const project = await resolveProjectForDocument(uri);
     if (project === undefined) return null;
     const artifacts = project.artifacts.document(uri);
@@ -782,7 +781,7 @@ function createServerOn(connection: Connection): LanguageServer {
   }
 
   connection.onDidOpenTextDocument((event) => {
-    const previous = getDocument(event.textDocument.uri);
+    const previous = getOpenDocument(event.textDocument.uri);
     const document = documents.open(event.textDocument);
     if (
       previous !== undefined &&
