@@ -20,6 +20,7 @@ describe('schemaDriftNextActions', () => {
         source: { format: 'prisma6', inputs: ['/project/prisma/schema.prisma'] },
         verb: 'sign',
         cwd: '/project',
+        canInferContract: true,
       }),
     ).toEqual([
       {
@@ -42,6 +43,7 @@ describe('schemaDriftNextActions', () => {
         source: { format: 'prisma7', inputs: ['/project/schema.prisma'] },
         verb: 'verify',
         cwd: '/project',
+        canInferContract: true,
       }),
     ).toEqual([
       {
@@ -64,6 +66,7 @@ describe('schemaDriftNextActions', () => {
         source: { format: 'prisma7', inputs: [] },
         verb: 'sign',
         cwd: '/project',
+        canInferContract: true,
       })[0],
     ).toEqual({
       kind: 'user-choice',
@@ -78,6 +81,7 @@ describe('schemaDriftNextActions', () => {
         source: { format: 'psl', inputs: ['/project/prisma/contract.prisma'] },
         verb: 'sign',
         cwd: '/project',
+        canInferContract: true,
       }),
     ).toEqual([
       DB_UPDATE,
@@ -85,9 +89,31 @@ describe('schemaDriftNextActions', () => {
         kind: 'run-command',
         label:
           'Or replace prisma/contract.prisma with a contract inferred from the database, then re-emit and sign again',
-        command: '{bin} contract infer --output prisma/contract.prisma',
+        command: '{bin} contract infer --output "prisma/contract.prisma"',
       },
     ]);
+  });
+
+  it('offers a hand edit instead of contract infer when the family cannot infer a contract', () => {
+    expect(
+      schemaDriftNextActions({
+        source: { format: 'psl', inputs: ['/project/prisma/contract.prisma'] },
+        verb: 'sign',
+        cwd: '/project',
+        canInferContract: false,
+      }),
+    ).toEqual([DB_UPDATE, HAND_EDIT]);
+  });
+
+  it('offers a hand edit instead of contract infer when the one PSL input is a glob', () => {
+    expect(
+      schemaDriftNextActions({
+        source: { format: 'psl', inputs: ['/project/prisma/*.prisma'] },
+        verb: 'sign',
+        cwd: '/project',
+        canInferContract: true,
+      }),
+    ).toEqual([DB_UPDATE, HAND_EDIT]);
   });
 
   it('offers a hand edit instead of contract infer when the PSL source has several files', () => {
@@ -96,13 +122,19 @@ describe('schemaDriftNextActions', () => {
         source: { format: 'psl', inputs: ['/project/a.prisma', '/project/b.prisma'] },
         verb: 'sign',
         cwd: '/project',
+        canInferContract: true,
       }),
     ).toEqual([DB_UPDATE, HAND_EDIT]);
   });
 
   it('offers a hand edit instead of contract infer when the PSL source declares no inputs', () => {
     expect(
-      schemaDriftNextActions({ source: { format: 'psl' }, verb: 'sign', cwd: '/project' }),
+      schemaDriftNextActions({
+        source: { format: 'psl' },
+        verb: 'sign',
+        cwd: '/project',
+        canInferContract: true,
+      }),
     ).toEqual([DB_UPDATE, HAND_EDIT]);
   });
 
@@ -112,14 +144,41 @@ describe('schemaDriftNextActions', () => {
         source: { format: 'typescript', inputs: [] },
         verb: 'sign',
         cwd: '/project',
+        canInferContract: true,
+      }),
+    ).toEqual([DB_UPDATE, HAND_EDIT]);
+  });
+
+  it('offers db update, then a hand edit of the contract, for an unknown format', () => {
+    expect(
+      schemaDriftNextActions({
+        source: { format: 'custom', inputs: ['/project/schema.x'] },
+        verb: 'sign',
+        cwd: '/project',
+        canInferContract: true,
+      }),
+    ).toEqual([DB_UPDATE, HAND_EDIT]);
+  });
+
+  it('offers db update, then a hand edit of the contract, when the source declares no format', () => {
+    expect(
+      schemaDriftNextActions({
+        source: { inputs: ['/project/contract.prisma'] },
+        verb: 'sign',
+        cwd: '/project',
+        canInferContract: true,
       }),
     ).toEqual([DB_UPDATE, HAND_EDIT]);
   });
 
   it('offers db update, then a hand edit of the contract, when the config has no source', () => {
-    expect(schemaDriftNextActions({ source: undefined, verb: 'sign', cwd: '/project' })).toEqual([
-      DB_UPDATE,
-      HAND_EDIT,
-    ]);
+    expect(
+      schemaDriftNextActions({
+        source: undefined,
+        verb: 'sign',
+        cwd: '/project',
+        canInferContract: true,
+      }),
+    ).toEqual([DB_UPDATE, HAND_EDIT]);
   });
 });

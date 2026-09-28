@@ -1408,6 +1408,9 @@ importers:
       strip-ansi:
         specifier: ^7.2.0
         version: 7.2.0
+      tinyglobby:
+        specifier: 'catalog:'
+        version: 0.2.17
       wrap-ansi:
         specifier: ^10.0.0
         version: 10.0.0

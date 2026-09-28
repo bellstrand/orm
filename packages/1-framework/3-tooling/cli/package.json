@@ -44,6 +44,7 @@
     "pathe": "^2.0.3",
     "string-width": "^8.2.2",
     "strip-ansi": "^7.2.0",
+    "tinyglobby": "catalog:",
     "wrap-ansi": "^10.0.0"
   },
   "devDependencies": {

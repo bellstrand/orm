@@ -27,6 +27,7 @@ const mocks = {
   close: vi.fn(),
   verify: vi.fn(),
   dbVerify: vi.fn(),
+  supportsPslContractInfer: vi.fn(),
 };
 
 /**
@@ -40,6 +41,7 @@ const commands: MountedTree = {
       connect: mocks.connect,
       verify: mocks.verify,
       dbVerify: mocks.dbVerify,
+      supportsPslContractInfer: mocks.supportsPslContractInfer,
       close: mocks.close,
     }),
   ),
@@ -147,6 +149,7 @@ beforeEach(() => {
   mocks.close.mockReset().mockResolvedValue(undefined);
   mocks.verify.mockReset().mockResolvedValue(verified());
   mocks.dbVerify.mockReset().mockResolvedValue(aggregateOk({}));
+  mocks.supportsPslContractInfer.mockReset().mockReturnValue(true);
 });
 
 function diagnosticsOf(run: {
@@ -601,6 +604,35 @@ describe('db verify', () => {
       expect(mocks.dbVerify).toHaveBeenCalledWith(expect.objectContaining({ skipMarker: true }));
       expect(diagnosticsOf(run).map((entry) => entry.code)).toEqual([
         'CONTRACT.SCHEMA_VERIFICATION_FAILED',
+      ]);
+    });
+
+    it('gives --schema-only drift the Prisma 7 actions for a Prisma 7 source', async () => {
+      const dir = await projectDir();
+      mocks.dbVerify.mockResolvedValue(aggregateOk({ perSpace: [['app', DRIFTED]] }));
+      const config = ormConfig({
+        contract: {
+          source: { format: 'prisma7', inputs: ['prisma/schema.prisma'], load: async () => ({}) },
+          output: 'output/contract.json',
+        },
+      });
+
+      const run = await harness(config).run(['db', 'verify', '--schema-only', '--json'], {
+        cwd: dir,
+      });
+
+      expect(diagnosticsOf(run)[0]?.nextActions).toEqual([
+        {
+          kind: 'user-choice',
+          label:
+            'If Prisma 7 still manages this database, change prisma/schema.prisma to describe it as it is, re-run contract emit, then verify again',
+        },
+        {
+          kind: 'run-command',
+          label:
+            'Or, if Prisma 8 manages it, change the database to match the contract, then verify again',
+          command: '{bin} db update',
+        },
       ]);
     });
 

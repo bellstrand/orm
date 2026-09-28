@@ -1,3 +1,4 @@
+import { writeRef } from '@internal/migration-tools/refs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   CONNECTION,
@@ -12,6 +13,7 @@ import {
   mocks,
   ormConfig,
   projectDir,
+  refsDirOf,
   resetMocks,
   schemaResult,
   signResult,
@@ -19,6 +21,28 @@ import {
 
 beforeEach(resetMocks);
 afterEach(cleanupProjectDirs);
+
+const SOURCE_NEUTRAL_ACTIONS = [
+  {
+    kind: 'run-command',
+    label: 'Change the database to match the contract, then sign again',
+    command: '{bin} db update',
+  },
+  {
+    kind: 'user-choice',
+    label:
+      'Or change the contract to describe the database as it is, re-run contract emit, then sign again',
+  },
+];
+
+function pslConfig(): Record<string, unknown> {
+  return ormConfig({
+    contract: {
+      source: { format: 'psl', inputs: ['contract.prisma'], load: async () => ({}) },
+      output: 'output/contract.json',
+    },
+  });
+}
 
 describe('db sign', () => {
   describe('verification passes', () => {
@@ -183,9 +207,32 @@ describe('db sign', () => {
           kind: 'run-command',
           label:
             'Or replace contract.prisma with a contract inferred from the database, then re-emit and sign again',
-          command: '{bin} contract infer --output contract.prisma',
+          command: '{bin} contract infer --output "contract.prisma"',
         },
       ]);
+    });
+
+    it('offers a hand edit of a PSL source when the family cannot infer a contract', async () => {
+      const dir = await projectDir();
+      mocks.schemaVerify.mockResolvedValue(DRIFTED);
+      mocks.supportsPslContractInfer.mockReturnValue(false);
+
+      const run = await harness(pslConfig()).run(['db', 'sign', '--json'], { cwd: dir });
+
+      expect(diagnosticsOf(run)[0]?.nextActions).toEqual(SOURCE_NEUTRAL_ACTIONS);
+    });
+
+    it('gives the source-neutral actions when signing a ref, whose contract is not the source', async () => {
+      const dir = await projectDir();
+      await writeRef(refsDirOf(dir), 'staging', { hash: HASH_A, invariants: [] });
+      mocks.schemaVerify.mockResolvedValue(DRIFTED);
+
+      const run = await harness(pslConfig()).run(['db', 'sign', 'staging', '--json'], {
+        cwd: dir,
+      });
+
+      expect(run.exitCode).toBe(4);
+      expect(diagnosticsOf(run)[0]?.nextActions).toEqual(SOURCE_NEUTRAL_ACTIONS);
     });
 
     it('reports the schema-verify document as the --json payload', async () => {

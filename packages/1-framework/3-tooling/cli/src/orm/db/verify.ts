@@ -326,6 +326,7 @@ function driftDiagnostics(inputs: {
   readonly source: ContractSourceProvider | undefined;
   readonly appSpaceId: string;
   readonly cwd: string;
+  readonly canInferContract: boolean;
 }): readonly Diagnostic[] {
   const perSpace = [...inputs.perSpace]
     .filter(([, result]) => !result.ok)
@@ -337,6 +338,7 @@ function driftDiagnostics(inputs: {
           source: space === inputs.appSpaceId ? inputs.source : undefined,
           verb: 'verify',
           cwd: inputs.cwd,
+          canInferContract: inputs.canInferContract,
         }),
       }),
     );
@@ -488,6 +490,7 @@ export function createDbVerifyCommand(
                       source: ctx.config.contract?.source,
                       appSpaceId: aggregate.value.appSpaceId,
                       cwd: ctx.cwd,
+                      canInferContract: client.supportsPslContractInfer(),
                     }),
               },
               schemaPresentations({ document, header, strict }),
@@ -584,6 +587,7 @@ export function createDbVerifyCommand(
                         source: ctx.config.contract?.source,
                         appSpaceId: aggregate.value.appSpaceId,
                         cwd: ctx.cwd,
+                        canInferContract: client.supportsPslContractInfer(),
                       })
                     : []),
                 ],
@@ -632,6 +636,7 @@ export function createDbVerifyCommand(
                   source: ctx.config.contract?.source,
                   appSpaceId: aggregate.value.appSpaceId,
                   cwd: ctx.cwd,
+                  canInferContract: client.supportsPslContractInfer(),
                 }),
               },
               schemaPresentations({ document, header, strict }),

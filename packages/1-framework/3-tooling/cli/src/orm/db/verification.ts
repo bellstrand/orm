@@ -13,6 +13,7 @@ import { isStructuredErrorCode } from '@internal/utils/structured-error';
 import type { Block, TreeNode } from '@prisma/cli-engine';
 import type { Diagnostic, NextAction, Result } from '@prisma/cli-engine/protocol';
 import { CliStructuredError, notOk, ok } from '@prisma/cli-engine/protocol';
+import { isDynamicPattern } from 'tinyglobby';
 import {
   errorConfigValidation,
   errorContractValidationFailed,
@@ -315,6 +316,7 @@ export function schemaDriftNextActions(inputs: {
   readonly source: Pick<OpaqueContractSourceProvider, 'format' | 'inputs'> | undefined;
   readonly verb: 'sign' | 'verify';
   readonly cwd: string;
+  readonly canInferContract: boolean;
 }): readonly NextAction[] {
   const { source, verb, cwd } = inputs;
   const updateDatabase = runCommandAction(
@@ -331,7 +333,12 @@ export function schemaDriftNextActions(inputs: {
       return ownerSchemaActions({ owner: 'Prisma 7', schemaInput: source.inputs?.[0], verb, cwd });
     case 'psl': {
       const [only, ...rest] = source.inputs ?? [];
-      if (only === undefined || rest.length > 0) {
+      if (
+        !inputs.canInferContract ||
+        only === undefined ||
+        rest.length > 0 ||
+        isDynamicPattern(only)
+      ) {
         return [updateDatabase, handEditContract];
       }
       const path = displayPath(only, cwd);
@@ -339,7 +346,7 @@ export function schemaDriftNextActions(inputs: {
         updateDatabase,
         runCommandAction(
           `Or replace ${path} with a contract inferred from the database, then re-emit and ${verb} again`,
-          `{bin} contract infer --output ${path}`,
+          `{bin} contract infer --output "${path}"`,
         ),
       ];
     }

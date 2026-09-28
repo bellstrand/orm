@@ -346,9 +346,10 @@ export function createDbSignCommand(
                     result: verified,
                     space: undefined,
                     nextActions: schemaDriftNextActions({
-                      source: ctx.config.contract?.source,
+                      source: contractRef === undefined ? ctx.config.contract?.source : undefined,
                       verb: 'sign',
                       cwd: ctx.cwd,
+                      canInferContract: client.supportsPslContractInfer(),
                     }),
                   }),
                 ],

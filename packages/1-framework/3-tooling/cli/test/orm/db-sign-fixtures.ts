@@ -27,7 +27,7 @@ export const EMITTED_CONTRACT_DTS = 'export type Contract = unknown;\n';
 export const RENDERED_CONTRACT_DTS = '// rendered\nexport type Contract = { rendered: true };\n';
 
 export const mocks: Record<
-  'connect' | 'close' | 'schemaVerify' | 'sign' | 'renderContractDts',
+  'connect' | 'close' | 'schemaVerify' | 'sign' | 'renderContractDts' | 'supportsPslContractInfer',
   Mock
 > = {
   connect: vi.fn(),
@@ -35,6 +35,7 @@ export const mocks: Record<
   schemaVerify: vi.fn(),
   sign: vi.fn(),
   renderContractDts: vi.fn(),
+  supportsPslContractInfer: vi.fn(),
 };
 
 /**
@@ -49,6 +50,7 @@ const commands: MountedTree = {
       schemaVerify: mocks.schemaVerify,
       sign: mocks.sign,
       renderContractDts: mocks.renderContractDts,
+      supportsPslContractInfer: mocks.supportsPslContractInfer,
       close: mocks.close,
     }),
   ),
@@ -164,6 +166,7 @@ export function resetMocks(): void {
   mocks.close.mockReset().mockResolvedValue(undefined);
   mocks.schemaVerify.mockReset().mockResolvedValue(schemaResult());
   mocks.renderContractDts.mockReset().mockResolvedValue(ok({ contractDts: RENDERED_CONTRACT_DTS }));
+  mocks.supportsPslContractInfer.mockReset().mockReturnValue(true);
   mocks.sign.mockReset().mockImplementation(async (input: SignInput) => {
     return signResult(input.contract.storage.storageHash);
   });
